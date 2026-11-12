@@ -60,7 +60,7 @@ func sendCommand() *cobra.Command {
 	cmd.Flags().StringVar(&codeFlag, "code", "", "human-generated code phrase")
 	cmd.Flags().StringVar(&sendTextFlag, "text", "", "text message to send, instead of a file.\nUse '-' to read from stdin")
 	cmd.Flags().BoolVar(&hideProgressBar, "hide-progress", false, "suppress progress-bar display")
-	cmd.Flags().BoolVar(&showQRCode, "qr", envBool("WORMHOLE_QR", true), "display code as QR code (use --no-qr to disable, or set WORMHOLE_QR=0)")
+	cmd.Flags().BoolVar(&showQRCode, "qr", envBool("WORMHOLE_QR", true), "display code as QR code (default on; use --qr=false or WORMHOLE_QR=0 to disable)")
 	cmd.Flags().BoolVarP(&zeromode, "zeromode", "0", false, "enable no-code anything-goes mode")
 	cmd.Flags().BoolVar(&ignoreUnsendable, "ignore-unsendable-files", false, "don't raise an error if a file can't be read")
 
