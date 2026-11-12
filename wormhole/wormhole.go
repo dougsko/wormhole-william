@@ -52,6 +52,23 @@ type Client struct {
 	// of band mechanism before proceeding with the file transmission.
 	// If VerifierOk returns false the transmission will be aborted.
 	VerifierOk func(verifier string) bool
+
+	// OnConnect, if non-nil, is invoked after the connection to the
+	// rendezvous server is established, with the server's welcome
+	// information (message of the day and the current recommended CLI
+	// version). Callers may use it to surface server announcements; the
+	// CLI uses it to print them. It is always invoked before any other
+	// activity and never invoked on connection failure. Existing
+	// callers may leave it nil.
+	OnConnect func(info rendezvous.ConnectInfo)
+
+	// NoListen disables opening a local listening socket for transit
+	// connections. When set, the client does not advertise direct-tcp-v1
+	// hints and never accepts direct connections; it relies on the
+	// configured transit relay instead. This matches the Python client's
+	// --no-listen flag (used e.g. for testing relay paths). The zero
+	// value (false) preserves the default behavior.
+	NoListen bool
 }
 
 var (

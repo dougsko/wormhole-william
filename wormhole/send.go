@@ -39,9 +39,12 @@ func (c *Client) SendText(ctx context.Context, msg string, opts ...SendOption) (
 
 	rc := rendezvous.NewClient(c.url(), sideID, appID)
 
-	_, err := rc.Connect(ctx)
+	cinfo, err := rc.Connect(ctx)
 	if err != nil {
 		return "", nil, err
+	}
+	if c.OnConnect != nil {
+		c.OnConnect(*cinfo)
 	}
 
 	var pwStr string
@@ -201,9 +204,12 @@ func (c *Client) sendFileDirectory(ctx context.Context, offer *offerMsg, r io.Re
 	appID := c.appID()
 	rc := rendezvous.NewClient(c.url(), sideID, appID)
 
-	_, err := rc.Connect(ctx)
+	cinfo, err := rc.Connect(ctx)
 	if err != nil {
 		return "", nil, err
+	}
+	if c.OnConnect != nil {
+		c.OnConnect(*cinfo)
 	}
 
 	var pwStr string
@@ -297,7 +303,7 @@ func (c *Client) sendFileDirectory(ctx context.Context, offer *offerMsg, r io.Re
 		}
 
 		transitKey := deriveTransitKey(clientProto.sharedKey, appID)
-		transport := newFileTransport(transitKey, appID, c.relayAddr())
+		transport := newFileTransport(transitKey, appID, c.relayAddr(), c.NoListen)
 		err = transport.listen()
 		if err != nil {
 			sendErr(err)

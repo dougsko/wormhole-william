@@ -36,9 +36,12 @@ func (c *Client) Receive(ctx context.Context, code string) (fr *IncomingMessage,
 		rc.Close(ctx, mood)
 	}()
 
-	_, err := rc.Connect(ctx)
+	cinfo, err := rc.Connect(ctx)
 	if err != nil {
 		return nil, err
+	}
+	if c.OnConnect != nil {
+		c.OnConnect(*cinfo)
 	}
 	nameplate, err := nameplateFromCode(code)
 	if err != nil {
@@ -157,7 +160,7 @@ func (c *Client) Receive(ctx context.Context, code string) (fr *IncomingMessage,
 	}
 
 	transitKey := deriveTransitKey(clientProto.sharedKey, appID)
-	transport := newFileTransport(transitKey, appID, c.relayAddr())
+	transport := newFileTransport(transitKey, appID, c.relayAddr(), c.NoListen)
 
 	transitMsg, err := transport.makeTransitMsg()
 	if err != nil {

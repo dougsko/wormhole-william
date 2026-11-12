@@ -154,11 +154,12 @@ func (d *transportCryptor) writeRecord(msg []byte) error {
 	return err
 }
 
-func newFileTransport(transitKey []byte, appID, relayAddr string) *fileTransport {
+func newFileTransport(transitKey []byte, appID, relayAddr string, noListen bool) *fileTransport {
 	return &fileTransport{
 		transitKey: transitKey,
 		appID:      appID,
 		relayAddr:  relayAddr,
+		noListen:   noListen,
 	}
 }
 
@@ -166,6 +167,7 @@ type fileTransport struct {
 	listener   net.Listener
 	relayConn  net.Conn
 	relayAddr  string
+	noListen   bool
 	transitKey []byte
 	appID      string
 }
@@ -456,7 +458,7 @@ func (t *fileTransport) relayHandshakeHeader() []byte {
 var testDisableLocalListener bool
 
 func (t *fileTransport) listen() error {
-	if testDisableLocalListener {
+	if testDisableLocalListener || t.noListen {
 		return nil
 	}
 

@@ -12,8 +12,8 @@ import (
 	"strings"
 
 	"github.com/cheggaaa/pb/v3"
-	"github.com/klauspost/compress/zip"
 	"github.com/dougsko/wormhole-william/wormhole"
+	"github.com/klauspost/compress/zip"
 	"github.com/spf13/cobra"
 )
 
@@ -80,15 +80,20 @@ func recvAction(cmd *cobra.Command, args []string) {
 		}
 	case wormhole.TransferFile:
 		var acceptFile bool
-		if _, err := os.Stat(msg.Name); err == nil {
+		srcName, err := safeBaseName(msg.Name)
+		if err != nil {
 			msg.Reject()
-			errf("Error refusing to overwrite existing '%s'", msg.Name)
+			bail("Unsafe filename in transfer offer: %s", msg.Name)
+		}
+		if _, err := os.Stat(srcName); err == nil {
+			msg.Reject()
+			bail("Error refusing to overwrite existing '%s'", srcName)
 		} else if !os.IsNotExist(err) {
 			msg.Reject()
-			errf("Error stat'ing existing '%s'\n", msg.Name)
+			bail("Error stat'ing existing '%s'", srcName)
 		} else {
 			reader := bufio.NewReader(os.Stdin)
-			fmt.Printf("Receiving file (%s) into: %s\n", formatBytes(msg.TransferBytes64), msg.Name)
+			fmt.Printf("Receiving file (%s) into: %s\n", formatBytes(msg.TransferBytes64), srcName)
 			fmt.Print("ok? (y/N):")
 
 			line, err := reader.ReadString('\n')
@@ -108,7 +113,7 @@ func recvAction(cmd *cobra.Command, args []string) {
 				if err != nil {
 					bail("Failed to get working directory: %s", err)
 				}
-				f, err := ioutil.TempFile(wd, fmt.Sprintf("%s.tmp", msg.Name))
+				f, err := ioutil.TempFile(wd, fmt.Sprintf("%s.tmp", srcName))
 				if err != nil {
 					bail("Failed to create tempfile: %s", err)
 				}
@@ -126,10 +131,11 @@ func recvAction(cmd *cobra.Command, args []string) {
 				tmpName := f.Name()
 				f.Close()
 
-				err = os.Rename(tmpName, msg.Name)
+				err = os.Rename(tmpName, srcName)
 				if err != nil {
-					bail("Rename %s to %s failed: %s", tmpName, msg.Name, err)
+					bail("Rename %s to %s failed: %s", tmpName, srcName, err)
 				}
+				fmt.Printf("Received file written to: %s\n", srcName)
 			}
 		}
 	case wormhole.TransferDirectory:
@@ -140,23 +146,23 @@ func recvAction(cmd *cobra.Command, args []string) {
 			bail("Failed to get working directory: %s", err)
 		}
 
-		dirName := msg.Name
-		dirName, err = filepath.Abs(dirName)
+		dirBase, err := safeBaseName(msg.Name)
 		if err != nil {
-			bail("Failed to get abs directory: %s", err)
+			msg.Reject()
+			bail("Unsafe directory name in transfer offer: %s", msg.Name)
 		}
 
-		if filepath.Dir(dirName) != wd {
-			bail("Bad Directory name %s", msg.Name)
-		}
+		dirName := filepath.Join(wd, dirBase)
 
 		if _, err := os.Stat(dirName); err == nil {
-			errf("Error refusing to overwrite existing '%s'", msg.Name)
+			msg.Reject()
+			bail("Error refusing to overwrite existing '%s'", dirBase)
 		} else if !os.IsNotExist(err) {
-			errf("Error stat'ing existing '%s'\n", msg.Name)
+			msg.Reject()
+			bail("Error stat'ing existing '%s'", dirBase)
 		} else {
 			reader := bufio.NewReader(os.Stdin)
-			fmt.Printf("Receiving directory (%s) into: %s\n", formatBytes(msg.TransferBytes64), msg.Name)
+			fmt.Printf("Receiving directory (%s) into: %s\n", formatBytes(msg.TransferBytes64), dirBase)
 			fmt.Printf("%d files, %s (uncompressed)\n", msg.FileCount, formatBytes(msg.UncompressedBytes64))
 			fmt.Print("ok? (y/N):")
 
@@ -173,12 +179,12 @@ func recvAction(cmd *cobra.Command, args []string) {
 				msg.Reject()
 				bail("transfer rejected")
 			} else {
-				err = os.Mkdir(msg.Name, 0777)
+				err = os.Mkdir(dirName, 0777)
 				if err != nil {
-					bail("Mkdir error for %s: %s\n", msg.Name, err)
+					bail("Mkdir error for %s: %s\n", dirBase, err)
 				}
 
-				tmpFile, err := ioutil.TempFile(wd, msg.Name+".zip.tmp")
+				tmpFile, err := ioutil.TempFile(wd, dirBase+".zip.tmp")
 				if err != nil {
 					bail("Failed to create tempfile: %s", err)
 				}
@@ -205,7 +211,7 @@ func recvAction(cmd *cobra.Command, args []string) {
 						bail("Failes to calculate file path ABS: %s", err)
 					}
 
-					if !strings.HasPrefix(p, dirName) {
+					if !zipPathContained(dirName, p) {
 						bail("Dangerous filename detected: %s", zf.Name)
 					}
 
@@ -239,6 +245,7 @@ func recvAction(cmd *cobra.Command, args []string) {
 				}
 
 				proxyReader.Close()
+				fmt.Fprintf(os.Stderr, "Directory written to: %s\n", dirName)
 			}
 		}
 	}

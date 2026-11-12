@@ -12,8 +12,8 @@ import (
 	"strings"
 
 	"github.com/cheggaaa/pb/v3"
-	qrterminal "github.com/mdp/qrterminal/v3"
 	"github.com/dougsko/wormhole-william/wormhole"
+	qrterminal "github.com/mdp/qrterminal/v3"
 	"github.com/spf13/cobra"
 )
 
