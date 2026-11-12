@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"bufio"
 	"context"
 	"fmt"
 	"io"
@@ -65,7 +64,7 @@ func recvAction(cmd *cobra.Command, args []string) {
 	} else if allocate {
 		// handled below via ReceiveAllocated
 	} else {
-		reader := bufio.NewReader(os.Stdin)
+		reader := stdinReader
 		fmt.Print("Enter receive wormhole code: ")
 
 		line, err := reader.ReadString('\n')
@@ -139,7 +138,7 @@ func recvAction(cmd *cobra.Command, args []string) {
 			accept := acceptFile
 			fmt.Printf("Receiving file (%s) into: %s\n", formatBytes(msg.TransferBytes64), destName)
 			if !accept {
-				reader := bufio.NewReader(os.Stdin)
+				reader := stdinReader
 				fmt.Print("ok? (y/N):")
 
 				line, err := reader.ReadString('\n')
@@ -211,7 +210,7 @@ func recvAction(cmd *cobra.Command, args []string) {
 			fmt.Printf("Receiving directory (%s) into: %s\n", formatBytes(msg.TransferBytes64), dirName)
 			fmt.Printf("%d files, %s (uncompressed)\n", msg.FileCount, formatBytes(msg.UncompressedBytes64))
 			if !accept {
-				reader := bufio.NewReader(os.Stdin)
+				reader := stdinReader
 				fmt.Print("ok? (y/N):")
 
 				line, err := reader.ReadString('\n')

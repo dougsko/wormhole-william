@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"bufio"
 	"fmt"
 	"net"
 	"os"
@@ -10,6 +11,12 @@ import (
 	"github.com/dougsko/wormhole-william/version"
 	"github.com/spf13/cobra"
 )
+
+// stdinReader is the shared reader for interactive prompts. Sharing one
+// reader avoids silently dropping buffered input when multiple prompts run
+// in one process (e.g. `ssh accept`'s key selection followed by the
+// send confirmation).
+var stdinReader = bufio.NewReader(os.Stdin)
 
 var rootCmd = &cobra.Command{
 	Use:     "wormhole-william",
@@ -89,6 +96,7 @@ func Execute() error {
 
 	rootCmd.AddCommand(recvCommand())
 	rootCmd.AddCommand(sendCommand())
+	rootCmd.AddCommand(sshCommand())
 	rootCmd.AddCommand(completionCommand())
 	return rootCmd.Execute()
 }

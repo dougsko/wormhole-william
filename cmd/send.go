@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"bufio"
 	"context"
 	"fmt"
 	"io"
@@ -101,7 +100,7 @@ func newClient() wormhole.Client {
 
 	if verify {
 		c.VerifierOk = func(code string) bool {
-			reader := bufio.NewReader(os.Stdin)
+			reader := stdinReader
 			fmt.Printf("Verifier %s. ok? (yes/no): ", code)
 
 			yn, _ := reader.ReadString('\n')
@@ -285,7 +284,7 @@ func sendText() {
 	} else if sendTextFlag != "" {
 		msg = sendTextFlag
 	} else {
-		reader := bufio.NewReader(os.Stdin)
+		reader := stdinReader
 		fmt.Print("Text to send: ")
 		msg, _ = reader.ReadString('\n')
 		msg = strings.TrimSpace(msg)
