@@ -3,7 +3,7 @@ package ed25519group
 import (
 	"bytes"
 	"fmt"
-	group "github.com/psanford/wormhole-william/internal/gospake2/groups"
+	group "github.com/dougsko/wormhole-william/internal/gospake2/groups"
 	"math/big"
 )
 

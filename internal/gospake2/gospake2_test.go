@@ -3,9 +3,9 @@ package gospake2
 import (
 	"bytes"
 	"fmt"
-	"github.com/psanford/wormhole-william/internal/gospake2/ed25519group"
-	group "github.com/psanford/wormhole-william/internal/gospake2/groups"
-	"github.com/psanford/wormhole-william/internal/gospake2/integergroup"
+	"github.com/dougsko/wormhole-william/internal/gospake2/ed25519group"
+	group "github.com/dougsko/wormhole-william/internal/gospake2/groups"
+	"github.com/dougsko/wormhole-william/internal/gospake2/integergroup"
 	"math/big"
 	"testing"
 )

@@ -1,5 +1,7 @@
 # wormhole-william
 
+This is a fork of [github.com/psanford/wormhole-william](https://github.com/psanford/wormhole-william) (MIT license, Copyright (c) 2019 Peter Sanford), maintained by dougsko. It carries additional work to close gaps between it and the [python magic-wormhole](https://github.com/warner/magic-wormhole) reference implementation, while keeping the existing library API stable (additions only).
+
 wormhole-william is a Go (golang) implementation of [magic wormhole](https://magic-wormhole.readthedocs.io/en/latest/). It provides secure end-to-end encrypted file transfers between computers. The endpoints are connected using the same "wormhole code".
 
 wormhole-william is compatible with the official [python magic wormhole cli tool](https://github.com/warner/magic-wormhole).
@@ -11,7 +13,7 @@ Currently, wormhole-william supports:
 
 ## Docs
 
-https://pkg.go.dev/github.com/psanford/wormhole-william/wormhole?tab=doc
+https://pkg.go.dev/github.com/dougsko/wormhole-william/wormhole?tab=doc
 
 ## CLI Usage
 
@@ -64,7 +66,7 @@ wormhole-william uses go modules so it requires a version of the go tool chain >
 To just install via the go tool run:
 
 ```
-go install github.com/psanford/wormhole-william@latest
+go install github.com/dougsko/wormhole-william@latest
 ```
 
 ## API Usage
@@ -80,7 +82,7 @@ import (
 	"io/ioutil"
 	"log"
 
-	"github.com/psanford/wormhole-william/wormhole"
+	"github.com/dougsko/wormhole-william/wormhole"
 )
 
 func sendText() {
@@ -129,7 +131,7 @@ func recvText(code string) {
 }
 ```
 
-See the [cli tool](https://github.com/psanford/wormhole-william/tree/master/cmd) and [examples](https://github.com/psanford/wormhole-william/tree/master/examples) directory for working examples of how to use the API to send and receive text, files and directories.
+See the [cli tool](https://github.com/dougsko/wormhole-william/tree/master/cmd) and [examples](https://github.com/dougsko/wormhole-william/tree/master/examples) directory for working examples of how to use the API to send and receive text, files and directories.
 
 ## Third Party Users of Wormhole William
 
@@ -137,4 +139,4 @@ See the [cli tool](https://github.com/psanford/wormhole-william/tree/master/cmd)
 - [riftshare](https://github.com/achhabra2/riftshare): Desktop filesharing app
 - [termshark](https://github.com/gcla/termshark): A terminal UI for tshark
 - [tmux-wormhole](https://github.com/gcla/tmux-wormhole): tmux wormhole integration
-- [wormhole-william-mobile](https://github.com/psanford/wormhole-william-mobile): Android wormhole-william app
+- [wormhole-william-mobile](https://github.com/dougsko/wormhole-william-mobile): Android wormhole-william app

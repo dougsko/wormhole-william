@@ -13,7 +13,7 @@ import (
 
 	"github.com/cheggaaa/pb/v3"
 	qrterminal "github.com/mdp/qrterminal/v3"
-	"github.com/psanford/wormhole-william/wormhole"
+	"github.com/dougsko/wormhole-william/wormhole"
 	"github.com/spf13/cobra"
 )
 

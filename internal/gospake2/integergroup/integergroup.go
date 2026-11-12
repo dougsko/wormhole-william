@@ -3,7 +3,7 @@ package integergroup
 import (
 	"crypto/sha256"
 	"fmt"
-	group "github.com/psanford/wormhole-william/internal/gospake2/groups"
+	group "github.com/dougsko/wormhole-william/internal/gospake2/groups"
 	"golang.org/x/crypto/hkdf"
 	"io"
 	"math/big"

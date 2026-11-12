@@ -5,9 +5,9 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/psanford/wormhole-william/internal/crypto"
-	"github.com/psanford/wormhole-william/rendezvous/rendezvousservertest"
-	"github.com/psanford/wormhole-william/version"
+	"github.com/dougsko/wormhole-william/internal/crypto"
+	"github.com/dougsko/wormhole-william/rendezvous/rendezvousservertest"
+	"github.com/dougsko/wormhole-william/version"
 )
 
 func TestBasicClient(t *testing.T) {

@@ -1,4 +1,4 @@
-module github.com/psanford/wormhole-william
+module github.com/dougsko/wormhole-william
 
 go 1.26.0
 

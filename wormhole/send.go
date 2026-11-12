@@ -14,9 +14,9 @@ import (
 	"strings"
 
 	"github.com/klauspost/compress/zip"
-	"github.com/psanford/wormhole-william/internal/crypto"
-	"github.com/psanford/wormhole-william/rendezvous"
-	"github.com/psanford/wormhole-william/wordlist"
+	"github.com/dougsko/wormhole-william/internal/crypto"
+	"github.com/dougsko/wormhole-william/rendezvous"
+	"github.com/dougsko/wormhole-william/wordlist"
 	"golang.org/x/crypto/nacl/secretbox"
 )
 

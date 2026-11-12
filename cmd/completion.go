@@ -6,10 +6,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/psanford/wormhole-william/internal/crypto"
-	"github.com/psanford/wormhole-william/rendezvous"
-	"github.com/psanford/wormhole-william/wordlist"
-	"github.com/psanford/wormhole-william/wormhole"
+	"github.com/dougsko/wormhole-william/internal/crypto"
+	"github.com/dougsko/wormhole-william/rendezvous"
+	"github.com/dougsko/wormhole-william/wordlist"
+	"github.com/dougsko/wormhole-william/wormhole"
 	"github.com/spf13/cobra"
 )
 

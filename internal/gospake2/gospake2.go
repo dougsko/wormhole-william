@@ -28,8 +28,8 @@ import (
 	"fmt"
 	"math/big"
 
-	ed25519 "github.com/psanford/wormhole-william/internal/gospake2/ed25519group"
-	group "github.com/psanford/wormhole-william/internal/gospake2/groups"
+	ed25519 "github.com/dougsko/wormhole-william/internal/gospake2/ed25519group"
+	group "github.com/dougsko/wormhole-william/internal/gospake2/groups"
 )
 
 var (

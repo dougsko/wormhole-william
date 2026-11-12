@@ -3,7 +3,7 @@ package cmd
 import (
 	"os"
 
-	"github.com/psanford/wormhole-william/version"
+	"github.com/dougsko/wormhole-william/version"
 	"github.com/spf13/cobra"
 )
 

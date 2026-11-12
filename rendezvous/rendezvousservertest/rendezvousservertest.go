@@ -18,8 +18,8 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
-	"github.com/psanford/wormhole-william/internal/crypto"
-	"github.com/psanford/wormhole-william/rendezvous/internal/msgs"
+	"github.com/dougsko/wormhole-william/internal/crypto"
+	"github.com/dougsko/wormhole-william/rendezvous/internal/msgs"
 )
 
 type TestServer struct {
