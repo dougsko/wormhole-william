@@ -12,16 +12,20 @@ import (
 	"strings"
 
 	"github.com/cheggaaa/pb/v3"
+	"github.com/dougsko/wormhole-william/rendezvous"
+	"github.com/dougsko/wormhole-william/version"
 	"github.com/dougsko/wormhole-william/wormhole"
 	qrterminal "github.com/mdp/qrterminal/v3"
 	"github.com/spf13/cobra"
 )
 
 var (
-	codeLen      int
-	codeFlag     string
-	sendTextFlag string
-	showQRCode   bool
+	codeLen          int
+	codeFlag         string
+	sendTextFlag     string
+	showQRCode       bool
+	zeromode         bool
+	ignoreUnsendable bool
 )
 
 func sendCommand() *cobra.Command {
@@ -56,19 +60,43 @@ func sendCommand() *cobra.Command {
 	cmd.Flags().StringVar(&codeFlag, "code", "", "human-generated code phrase")
 	cmd.Flags().StringVar(&sendTextFlag, "text", "", "text message to send, instead of a file.\nUse '-' to read from stdin")
 	cmd.Flags().BoolVar(&hideProgressBar, "hide-progress", false, "suppress progress-bar display")
-	cmd.Flags().BoolVar(&showQRCode, "qr", false, "display code as QR code (experimental)")
+	cmd.Flags().BoolVar(&showQRCode, "qr", envBool("WORMHOLE_QR", true), "display code as QR code (use --no-qr to disable, or set WORMHOLE_QR=0)")
+	cmd.Flags().BoolVarP(&zeromode, "zeromode", "0", false, "enable no-code anything-goes mode")
+	cmd.Flags().BoolVar(&ignoreUnsendable, "ignore-unsendable-files", false, "don't raise an error if a file can't be read")
 
 	return &cmd
 }
 
+func effectiveCode() string {
+	if zeromode {
+		if codeFlag != "" {
+			bail("Cannot combine -0/--zeromode with --code")
+		}
+		return "0-"
+	}
+	return codeFlag
+}
+
 func newClient() wormhole.Client {
-	if showQRCode && codeLen == 0 {
-		codeLen = 4
+	th, err := transitHelperAddress(transitHelper)
+	if err != nil {
+		bail("%v", err)
+	}
+
+	url := relayURL
+	if url == "" {
+		url = wormhole.DefaultRendezvousURL
 	}
 
 	c := wormhole.Client{
+		AppID:                     appID,
 		RendezvousURL:             relayURL,
+		TransitRelayAddress:       th,
 		PassPhraseComponentLength: codeLen,
+		NoListen:                  noListen,
+		OnConnect: func(info rendezvous.ConnectInfo) {
+			printWelcome(url, info)
+		},
 	}
 
 	if verify {
@@ -86,7 +114,25 @@ func newClient() wormhole.Client {
 	return c
 }
 
+func printWelcome(url string, info rendezvous.ConnectInfo) {
+	if info.MOTD != "" {
+		fmt.Fprintf(os.Stderr, "Server (at %s) says:\n", url)
+		for _, line := range strings.Split(strings.TrimRight(info.MOTD, "\n"), "\n") {
+			fmt.Fprintf(os.Stderr, " %s\n", line)
+		}
+	}
+	if info.CurrentCLIVersion != "" && info.CurrentCLIVersion != version.AgentVersion {
+		fmt.Fprintf(os.Stderr, "Warning: errors may occur unless both sides are running the same version\n")
+		fmt.Fprintf(os.Stderr, "Server claims %s is current, but ours is %s\n", info.CurrentCLIVersion, version.AgentVersion)
+	}
+}
+
 func printInstructions(code string) {
+	if zeromode {
+		fmt.Fprintf(os.Stderr, "On the other computer, please run: wormhole-william receive -0 (or wormhole receive -0)\n")
+		return
+	}
+
 	mwCmd := "wormhole receive"
 	wwCmd := "wormhole-william recv"
 
@@ -99,12 +145,7 @@ func printInstructions(code string) {
 	fmt.Printf("Wormhole code is: %s\n", code)
 
 	if showQRCode {
-		url := relayURL
-		if url == "" {
-			url = wormhole.DefaultRendezvousURL
-		}
-		content := fmt.Sprintf("wormhole:%s?code=%s", url, code)
-		qrterminal.Generate(content, qrterminal.L, os.Stdout)
+		qrterminal.Generate(fmt.Sprintf("wormhole-transfer:%s", code), qrterminal.L, os.Stderr)
 	}
 }
 
@@ -121,7 +162,7 @@ func sendFile(filename string) {
 	var bar *pb.ProgressBar
 
 	args := []wormhole.SendOption{
-		wormhole.WithCode(codeFlag),
+		wormhole.WithCode(effectiveCode()),
 	}
 
 	if !hideProgressBar {
@@ -172,6 +213,14 @@ func sendDir(dirpath string) {
 	var entries []wormhole.DirectoryEntry
 
 	filepath.Walk(dirpath, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			if ignoreUnsendable {
+				fmt.Fprintf(os.Stderr, "Skipping unsendable file %s: %s\n", path, err)
+				return nil
+			}
+			bail("Error walking %s: %s", path, err)
+		}
+
 		if info.IsDir() {
 			return nil
 		}
@@ -179,6 +228,17 @@ func sendDir(dirpath string) {
 		if !info.Mode().IsRegular() {
 			return nil
 		}
+
+		// probe readability now so we fail (or skip) before the transfer starts
+		probe, err := os.Open(path)
+		if err != nil {
+			if ignoreUnsendable {
+				fmt.Fprintf(os.Stderr, "Skipping unsendable file %s: %s\n", path, err)
+				return nil
+			}
+			bail("Cannot read %s: %s", path, err)
+		}
+		probe.Close()
 
 		relPath := strings.TrimPrefix(path, prefix)
 
@@ -196,7 +256,7 @@ func sendDir(dirpath string) {
 	c := newClient()
 
 	ctx := context.Background()
-	code, status, err := c.SendDirectory(ctx, dirname, entries, wormhole.WithCode(codeFlag))
+	code, status, err := c.SendDirectory(ctx, dirname, entries, wormhole.WithCode(effectiveCode()))
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -232,7 +292,7 @@ func sendText() {
 	}
 
 	ctx := context.Background()
-	code, status, err := c.SendText(ctx, msg, wormhole.WithCode(codeFlag))
+	code, status, err := c.SendText(ctx, msg, wormhole.WithCode(effectiveCode()))
 	if err != nil {
 		log.Fatal(err)
 	}

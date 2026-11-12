@@ -13,13 +13,30 @@ import (
 
 	"github.com/dougsko/wormhole-william/internal/crypto"
 	"github.com/dougsko/wormhole-william/rendezvous"
+	"github.com/dougsko/wormhole-william/wordlist"
 )
 
 // Receive receives a message sent by a wormhole client.
 //
 // It returns an IncomingMessage with metadata about the payload being sent.
 // To read the contents of the message call IncomingMessage.Read().
-func (c *Client) Receive(ctx context.Context, code string) (fr *IncomingMessage, returnErr error) {
+func (c *Client) Receive(ctx context.Context, code string) (*IncomingMessage, error) {
+	msg, _, err := c.receive(ctx, code, false, nil)
+	return msg, err
+}
+
+// ReceiveAllocated allocates a fresh code (as if the other side had been
+// the allocator) and waits for a sender that attaches to it. This mirrors
+// the Python CLI's `wormhole receive --allocate`. The allocated code is
+// returned so the caller can display it (e.g. "Allocated code: ..."). If
+// onCode is non-nil it is invoked with the code immediately after the
+// mailbox is created and before the connection blocks waiting for a
+// sender — useful for printing the code to the user.
+func (c *Client) ReceiveAllocated(ctx context.Context, onCode func(code string)) (*IncomingMessage, string, error) {
+	return c.receive(ctx, "", true, onCode)
+}
+
+func (c *Client) receive(ctx context.Context, code string, allocate bool, onCode func(code string)) (fr *IncomingMessage, allocatedCode string, returnErr error) {
 	sideID := crypto.RandSideID()
 	appID := c.appID()
 	rc := rendezvous.NewClient(c.url(), sideID, appID)
@@ -38,47 +55,61 @@ func (c *Client) Receive(ctx context.Context, code string) (fr *IncomingMessage,
 
 	cinfo, err := rc.Connect(ctx)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	if c.OnConnect != nil {
 		c.OnConnect(*cinfo)
 	}
-	nameplate, err := nameplateFromCode(code)
-	if err != nil {
-		return nil, err
+	var nameplate string
+	if allocate {
+		var err error
+		nameplate, err = rc.CreateMailbox(ctx)
+		if err != nil {
+			return nil, "", err
+		}
+		code = nameplate + "-" + wordlist.ChooseWords(c.wordCount())
+		if onCode != nil {
+			onCode(code)
+		}
+	} else {
+		var err error
+		nameplate, err = nameplateFromCode(code)
+		if err != nil {
+			return nil, "", err
+		}
+		err = rc.AttachMailbox(ctx, nameplate)
+		if err != nil {
+			return nil, "", err
+		}
 	}
-
-	err = rc.AttachMailbox(ctx, nameplate)
-	if err != nil {
-		return nil, err
-	}
+	allocatedCode = code
 
 	clientProto := newClientProtocol(ctx, rc, sideID, appID)
 
 	err = clientProto.WritePake(ctx, code)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	err = clientProto.ReadPake(ctx)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	err = clientProto.WriteVersion(ctx)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	_, err = clientProto.ReadVersion()
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	if c.VerifierOk != nil {
 		verifier, err := clientProto.Verifier()
 		if err != nil {
-			return nil, err
+			return nil, "", err
 		}
 
 		if ok := c.VerifierOk(hex.EncodeToString(verifier)); !ok {
@@ -87,23 +118,23 @@ func (c *Client) Receive(ctx context.Context, code string) (fr *IncomingMessage,
 				Error: &errMsg,
 			})
 			if writeErr != nil {
-				return nil, writeErr
+				return nil, "", writeErr
 			}
 
-			return nil, errors.New(errMsg)
+			return nil, "", errors.New(errMsg)
 		}
 	}
 
 	collector, err := clientProto.Collect(collectOffer, collectTransit)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	defer collector.close()
 
 	var offer offerMsg
 	err = collector.waitFor(&offer)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	fr = &IncomingMessage{}
@@ -117,7 +148,7 @@ func (c *Client) Receive(ctx context.Context, code string) (fr *IncomingMessage,
 
 		err = clientProto.WriteAppData(ctx, &answer)
 		if err != nil {
-			return nil, err
+			return nil, "", err
 		}
 
 		rc.Close(ctx, rendezvous.Happy)
@@ -130,7 +161,7 @@ func (c *Client) Receive(ctx context.Context, code string) (fr *IncomingMessage,
 
 		fr.Type = TransferText
 		fr.textReader = strings.NewReader(text)
-		return fr, nil
+		return fr, allocatedCode, nil
 	} else if offer.File != nil {
 		fr.Type = TransferFile
 		fr.Name = offer.File.FileName
@@ -150,13 +181,13 @@ func (c *Client) Receive(ctx context.Context, code string) (fr *IncomingMessage,
 		fr.FileCount = int(offer.Directory.NumFiles)
 		fr.ctx = ctx
 	} else {
-		return nil, errors.New("got non-file transfer offer")
+		return nil, "", errors.New("got non-file transfer offer")
 	}
 
 	var gotTransitMsg transitMsg
 	err = collector.waitFor(&gotTransitMsg)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	transitKey := deriveTransitKey(clientProto.sharedKey, appID)
@@ -164,14 +195,14 @@ func (c *Client) Receive(ctx context.Context, code string) (fr *IncomingMessage,
 
 	transitMsg, err := transport.makeTransitMsg()
 	if err != nil {
-		return nil, fmt.Errorf("make transit msg error: %s", err)
+		return nil, "", fmt.Errorf("make transit msg error: %s", err)
 	}
 
 	err = clientProto.WriteAppData(ctx, &genericMessage{
 		Transit: transitMsg,
 	})
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	reject := func() (initErr error) {
@@ -250,7 +281,7 @@ func (c *Client) Receive(ctx context.Context, code string) (fr *IncomingMessage,
 	fr.initializeTransfer = acceptAndInitialize
 	fr.rejectTransfer = reject
 
-	return fr, nil
+	return fr, allocatedCode, nil
 }
 
 // A IncomingMessage contains information about a payload sent to this wormhole client.

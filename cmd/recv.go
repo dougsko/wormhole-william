@@ -17,6 +17,13 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var (
+	allocate   bool
+	onlyText   bool
+	acceptFile bool
+	outputFile string
+)
+
 func recvCommand() *cobra.Command {
 	cmd := cobra.Command{
 		Use:     "receive [OPTIONS] [CODE]...",
@@ -27,6 +34,11 @@ func recvCommand() *cobra.Command {
 
 	cmd.Flags().BoolVarP(&verify, "verify", "v", false, "display verification string (and wait for approval)")
 	cmd.Flags().BoolVar(&hideProgressBar, "hide-progress", false, "suppress progress-bar display")
+	cmd.Flags().BoolVarP(&zeromode, "zeromode", "0", false, "enable no-code anything-goes mode")
+	cmd.Flags().BoolVarP(&allocate, "allocate", "a", false, "allocate a fresh code (do not prompt for one)")
+	cmd.Flags().BoolVarP(&onlyText, "only-text", "t", false, "refuse file transfers, only accept text transfers")
+	cmd.Flags().BoolVar(&acceptFile, "accept-file", envBool("WORMHOLE_ACCEPT_FILE", false), "accept file transfer without asking (env WORMHOLE_ACCEPT_FILE)")
+	cmd.Flags().StringVarP(&outputFile, "output-file", "o", "", "the file or directory to create (default: filename from sender)")
 
 	cmd.ValidArgsFunction = recvCodeCompletion
 
@@ -40,11 +52,19 @@ func recvAction(cmd *cobra.Command, args []string) {
 		ctx  = context.Background()
 	)
 
-	if len(args) > 0 {
+	if zeromode {
+		if len(args) > 0 {
+			bail("Cannot combine -0/--zeromode with a code")
+		}
+		if allocate {
+			bail("Cannot combine --allocate with -0/--zeromode")
+		}
+		code = "0-"
+	} else if len(args) > 0 {
 		code = args[0]
-	}
-
-	if code == "" {
+	} else if allocate {
+		// handled below via ReceiveAllocated
+	} else {
 		reader := bufio.NewReader(os.Stdin)
 		fmt.Print("Enter receive wormhole code: ")
 
@@ -62,9 +82,24 @@ func recvAction(cmd *cobra.Command, args []string) {
 		}
 	}
 
-	msg, err := c.Receive(ctx, code)
+	var msg *wormhole.IncomingMessage
+	var err error
+	if allocate {
+		msg, _, err = c.ReceiveAllocated(ctx, func(code string) {
+			fmt.Fprintf(os.Stderr, "Allocated code: %s\n", code)
+			fmt.Fprintf(os.Stderr, "On the other computer, please run:\n")
+			fmt.Fprintf(os.Stderr, "   wormhole-william send --code %s <filename>\n", code)
+		})
+	} else {
+		msg, err = c.Receive(ctx, code)
+	}
 	if err != nil {
 		log.Fatal(err)
+	}
+
+	if onlyText && msg.Type != wormhole.TransferText {
+		msg.Reject()
+		bail("refusing non-text transfer (--only-text)")
 	}
 
 	switch msg.Type {
@@ -79,41 +114,47 @@ func recvAction(cmd *cobra.Command, args []string) {
 			log.Fatal(err)
 		}
 	case wormhole.TransferFile:
-		var acceptFile bool
 		srcName, err := safeBaseName(msg.Name)
 		if err != nil {
 			msg.Reject()
 			bail("Unsafe filename in transfer offer: %s", msg.Name)
 		}
-		if _, err := os.Stat(srcName); err == nil {
+
+		destName := srcName
+		if outputFile != "" {
+			d := outputFile
+			if st, err := os.Stat(d); err == nil && st.IsDir() {
+				d = filepath.Join(d, srcName)
+			}
+			destName = d
+		}
+
+		if _, err := os.Stat(destName); err == nil {
 			msg.Reject()
-			bail("Error refusing to overwrite existing '%s'", srcName)
+			bail("Error refusing to overwrite existing '%s'", destName)
 		} else if !os.IsNotExist(err) {
 			msg.Reject()
-			bail("Error stat'ing existing '%s'", srcName)
+			bail("Error stat'ing existing '%s'", destName)
 		} else {
-			reader := bufio.NewReader(os.Stdin)
-			fmt.Printf("Receiving file (%s) into: %s\n", formatBytes(msg.TransferBytes64), srcName)
-			fmt.Print("ok? (y/N):")
+			accept := acceptFile
+			fmt.Printf("Receiving file (%s) into: %s\n", formatBytes(msg.TransferBytes64), destName)
+			if !accept {
+				reader := bufio.NewReader(os.Stdin)
+				fmt.Print("ok? (y/N):")
 
-			line, err := reader.ReadString('\n')
-			if err != nil {
-				errf("Error reading from stdin: %s\n", err)
-			}
-			line = strings.TrimSpace(line)
-			if line == "y" {
-				acceptFile = true
+				line, err := reader.ReadString('\n')
+				if err != nil {
+					errf("Error reading from stdin: %s\n", err)
+				}
+				line = strings.TrimSpace(line)
+				accept = line == "y"
 			}
 
-			if !acceptFile {
+			if !accept {
 				msg.Reject()
 				bail("transfer rejected")
 			} else {
-				wd, err := os.Getwd()
-				if err != nil {
-					bail("Failed to get working directory: %s", err)
-				}
-				f, err := ioutil.TempFile(wd, fmt.Sprintf("%s.tmp", srcName))
+				f, err := ioutil.TempFile(filepath.Dir(destName), filepath.Base(destName)+".tmp")
 				if err != nil {
 					bail("Failed to create tempfile: %s", err)
 				}
@@ -131,16 +172,14 @@ func recvAction(cmd *cobra.Command, args []string) {
 				tmpName := f.Name()
 				f.Close()
 
-				err = os.Rename(tmpName, srcName)
+				err = os.Rename(tmpName, destName)
 				if err != nil {
-					bail("Rename %s to %s failed: %s", tmpName, srcName, err)
+					bail("Rename %s to %s failed: %s", tmpName, destName, err)
 				}
-				fmt.Printf("Received file written to: %s\n", srcName)
+				fmt.Printf("Received file written to: %s\n", destName)
 			}
 		}
 	case wormhole.TransferDirectory:
-		var acceptDir bool
-
 		wd, err := os.Getwd()
 		if err != nil {
 			bail("Failed to get working directory: %s", err)
@@ -153,33 +192,41 @@ func recvAction(cmd *cobra.Command, args []string) {
 		}
 
 		dirName := filepath.Join(wd, dirBase)
+		if outputFile != "" {
+			if filepath.IsAbs(outputFile) {
+				dirName = filepath.Clean(outputFile)
+			} else {
+				dirName = filepath.Join(wd, outputFile)
+			}
+		}
 
 		if _, err := os.Stat(dirName); err == nil {
 			msg.Reject()
-			bail("Error refusing to overwrite existing '%s'", dirBase)
+			bail("Error refusing to overwrite existing '%s'", dirName)
 		} else if !os.IsNotExist(err) {
 			msg.Reject()
-			bail("Error stat'ing existing '%s'", dirBase)
+			bail("Error stat'ing existing '%s'", dirName)
 		} else {
-			reader := bufio.NewReader(os.Stdin)
-			fmt.Printf("Receiving directory (%s) into: %s\n", formatBytes(msg.TransferBytes64), dirBase)
+			accept := acceptFile
+			fmt.Printf("Receiving directory (%s) into: %s\n", formatBytes(msg.TransferBytes64), dirName)
 			fmt.Printf("%d files, %s (uncompressed)\n", msg.FileCount, formatBytes(msg.UncompressedBytes64))
-			fmt.Print("ok? (y/N):")
+			if !accept {
+				reader := bufio.NewReader(os.Stdin)
+				fmt.Print("ok? (y/N):")
 
-			line, err := reader.ReadString('\n')
-			if err != nil {
-				errf("Error reading from stdin: %s\n", err)
-			}
-			line = strings.TrimSpace(line)
-			if line == "y" {
-				acceptDir = true
+				line, err := reader.ReadString('\n')
+				if err != nil {
+					errf("Error reading from stdin: %s\n", err)
+				}
+				line = strings.TrimSpace(line)
+				accept = line == "y"
 			}
 
-			if !acceptDir {
+			if !accept {
 				msg.Reject()
 				bail("transfer rejected")
 			} else {
-				err = os.Mkdir(dirName, 0777)
+				err = os.MkdirAll(dirName, 0777)
 				if err != nil {
 					bail("Mkdir error for %s: %s\n", dirBase, err)
 				}
